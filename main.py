@@ -248,7 +248,6 @@ async def on_startup(dispatcher: Dispatcher):
     await bot.set_webhook(url=url, secret_token=WEBHOOK_SECRET)
     logging.info("Webhook set to %s", url)
 
-С
 dp.include_router(router)
 
 if __name__ == "__main__":
