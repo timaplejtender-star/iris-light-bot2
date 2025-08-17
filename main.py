@@ -241,14 +241,15 @@ app.add_routes([
     web.post(f"/webhook/{WEBHOOK_SECRET}", handle_webhook),
 ])
 
-@dp.startup()
-async def on_startup(dispatcher: Dispatcher):
-    # Настроим вебхук у Telegram
+dp.include_router(router)
+
+async def start():
+    dp.include_router(router)
     url = f"{PUBLIC_URL}/webhook/{WEBHOOK_SECRET}"
     await bot.set_webhook(url=url, secret_token=WEBHOOK_SECRET)
     logging.info("Webhook set to %s", url)
-
-dp.include_router(router)
+    web.run_app(app, host="0.0.0.0", port=PORT)
 
 if __name__ == "__main__":
-    web.run_app(app, host="0.0.0.0", port=PORT)
+    asyncio.run(start())
+
