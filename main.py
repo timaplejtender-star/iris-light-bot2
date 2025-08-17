@@ -251,6 +251,4 @@ async def on_startup(dispatcher: Dispatcher):
 dp.include_router(router)
 
 if __name__ == "__main__":
-    import asyncio
-    asyncio.get_event_loop().run_until_complete(dp.startup())
     web.run_app(app, host="0.0.0.0", port=PORT)
