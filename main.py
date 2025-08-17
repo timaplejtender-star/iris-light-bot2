@@ -243,14 +243,14 @@ app.add_routes([
 
 dp.include_router(router)
 
-async def main():
+async def on_startup(dispatcher: Dispatcher):
     url = f"{PUBLIC_URL}/webhook/{WEBHOOK_SECRET}"
     await bot.set_webhook(url=url, secret_token=WEBHOOK_SECRET)
     logging.info("Webhook set to %s", url)
 
-    web.run_app(app, host="0.0.0.0", port=PORT)
+dp.startup.register(on_startup)
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    web.run_app(app, host="0.0.0.0", port=PORT)
 
 
