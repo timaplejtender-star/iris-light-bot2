@@ -251,14 +251,13 @@ async def on_startup(dispatcher: Dispatcher):
 dp.include_router(router)
 
 if __name__ == "__main__":
-    async def start():
-        # Настроим вебхук у Telegram
-        url = f"{PUBLIC_URL}/webhook/{WEBHOOK_SECRET}"
-        await bot.set_webhook(url=url, secret_token=WEBHOOK_SECRET)
-        logging.info("Webhook set to %s", url)
+    import logging
 
+    async def main():
+        await dp.startup()
+        logging.info("Starting web server...")
+        # запуск aiohttp напрямую, БЕЗ asyncio.run()
         web.run_app(app, host="0.0.0.0", port=PORT)
 
     import asyncio
-    asyncio.run(start())
-
+    asyncio.get_event_loop().run_until_complete(main())
