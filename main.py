@@ -241,8 +241,6 @@ app.add_routes([
     web.post(f"/webhook/{WEBHOOK_SECRET}", handle_webhook),
 ])
 
-dp.include_router(router)
-
 async def start():
     dp.include_router(router)
     url = f"{PUBLIC_URL}/webhook/{WEBHOOK_SECRET}"
