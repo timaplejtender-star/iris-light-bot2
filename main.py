@@ -32,22 +32,11 @@ client = OpenAI(api_key=OPENAI_API_KEY)
 pool: asyncpg.Pool | None = None
 
 SYSTEM_PROMPTS = {
-    "neutral": (
-        "Ты — ‘Ирис‑лайт’: дружелюбный русскоязычный ассистент в Telegram."
-        " Отвечай ясно и по делу. Избегай токсичности и небезопасных советов."
-    ),
-    "brief": (
-        "Отвечай кратко, по пунктам, максимум фактов, минимум воды."
-    ),
-    "expert": (
-        "Тон — экспертный и аккуратный, добавляй пояснения и caveats."
-    ),
-    "coach": (
-        "Поддерживай, давай конкретные шаги и чек‑листы. Без сюсюканья."
-    ),
-    "coder": (
-        "Отвечай как senior‑разработчик: примеры кода, лучшие практики, кратко."
-    ),
+    "neutral": "Ты — ‘Ирис‑лайт’: дружелюбный русскоязычный ассистент в Telegram. Отвечай ясно и по делу. Избегай токсичности и небезопасных советов.",
+    "brief": "Отвечай кратко, по пунктам, максимум фактов, минимум воды.",
+    "expert": "Тон — экспертный и аккуратный, добавляй пояснения и caveats.",
+    "coach": "Поддерживай, давай конкретные шаги и чек‑листы. Без сюсюканья.",
+    "coder": "Отвечай как senior‑разработчик: примеры кода, лучшие практики, кратко.",
 }
 
 # ---------- DB ----------
@@ -57,7 +46,6 @@ CREATE TABLE IF NOT EXISTS users (
   mode TEXT NOT NULL DEFAULT 'neutral',
   last_seen TIMESTAMP NOT NULL DEFAULT NOW()
 );
-
 CREATE TABLE IF NOT EXISTS messages (
   id BIGSERIAL PRIMARY KEY,
   user_id BIGINT NOT NULL,
@@ -65,7 +53,6 @@ CREATE TABLE IF NOT EXISTS messages (
   content TEXT NOT NULL,
   ts TIMESTAMP NOT NULL DEFAULT NOW()
 );
-
 CREATE INDEX IF NOT EXISTS idx_messages_user_ts ON messages(user_id, ts);
 """
 
@@ -115,13 +102,8 @@ async def clear_history(user_id: int):
         await conn.execute("DELETE FROM messages WHERE user_id=$1", user_id)
 
 # ---------- Utils ----------
-
 def chunk(text: str, limit: int = 4096) -> List[str]:
-    parts = []
-    while text:
-        parts.append(text[:limit])
-        text = text[limit:]
-    return parts
+    return [text[i:i+limit] for i in range(0, len(text), limit)]
 
 _last_reply: dict[int, datetime] = {}
 
@@ -137,14 +119,12 @@ async def rate_limited(user_id: int, min_interval: float = 2.5) -> bool:
 async def llm_reply(user_id: int, text: str) -> str:
     mode = await get_mode(user_id)
     sys_prompt = SYSTEM_PROMPTS.get(mode, SYSTEM_PROMPTS["neutral"]) + (
-        " Если просят код — давай рабочие примеры. Если запрос опасен — откажись"
-        " и предложи безопасную альтернативу."
+        " Если просят код — давай рабочие примеры. Если запрос опасен — откажись и предложи безопасную альтернативу."
     )
     history = await get_history(user_id, HISTORY_WINDOW)
 
     messages = [{"role": "system", "content": sys_prompt}]
-    for role, content in history:
-        messages.append({"role": role, "content": content})
+    messages += [{"role": r, "content": c} for r, c in history]
     messages.append({"role": "user", "content": text})
 
     def _call():
@@ -162,18 +142,11 @@ async def llm_reply(user_id: int, text: str) -> str:
 @router.message(CommandStart())
 async def on_start(m: Message):
     await set_mode(m.from_user.id, "neutral")
-    await m.answer(
-        "Привет! Я ‘Ирис‑лайт’. Пиши что нужно.\n\n"
-        "Команды: /mode, /reset, /help"
-    )
+    await m.answer("Привет! Я ‘Ирис‑лайт’. Пиши что нужно.\n\nКоманды: /mode, /reset, /help")
 
 @router.message(Command("help"))
 async def on_help(m: Message):
-    await m.answer(
-        "/mode — показать/сменить режим.\n"
-        "/reset — очистить историю.\n"
-        "Пиши любые вопросы — помню контекст."
-    )
+    await m.answer("/mode — показать/сменить режим.\n/reset — очистить историю.\nПиши любые вопросы — помню контекст.")
 
 @router.message(Command("reset"))
 async def on_reset(m: Message):
@@ -185,10 +158,7 @@ async def on_mode(m: Message):
     parts = m.text.strip().split()
     if len(parts) == 1:
         cur = await get_mode(m.from_user.id)
-        await m.answer(
-            f"Текущий режим: {cur}. Доступны: brief, expert, coach, coder, neutral.\n"
-            "Пример: /mode expert"
-        )
+        await m.answer(f"Текущий режим: {cur}. Доступны: brief, expert, coach, coder, neutral.\nПример: /mode expert")
         return
     new_mode = parts[1].lower()
     if new_mode not in SYSTEM_PROMPTS:
@@ -203,36 +173,30 @@ async def on_text(m: Message):
     if await rate_limited(uid):
         await m.answer("Секунду...")
         return
-
     user_text = m.text.strip()
     await append_msg(uid, "user", user_text)
-
     try:
         reply = await llm_reply(uid, user_text)
     except Exception as e:
         logging.exception("LLM error: %s", e)
         await m.answer("Модель молчит. Попробуй переформулировать или позже.")
         return
-
     await append_msg(uid, "assistant", reply)
     for p in chunk(reply):
         await m.answer(p)
 
-# ---------- Webhook app (aiohttp) ----------
+# ---------- Webhook setup ----------
 app = web.Application()
 
 async def handle_health(request: web.Request):
     return web.Response(text="ok")
 
 async def handle_webhook(request: web.Request):
-    # проверка секретного токена в заголовке
     secret = request.headers.get("X-Telegram-Bot-Api-Secret-Token")
     if secret != WEBHOOK_SECRET:
         return web.Response(status=401, text="unauthorized")
-
     data = await request.json()
     update = Update.model_validate(data)
-    # обрабатываем обновление асинхронно, чтобы сразу вернуть 200 OK
     asyncio.create_task(dp.feed_update(bot, update))
     return web.Response(text="ok")
 
@@ -245,11 +209,13 @@ dp.include_router(router)
 
 async def on_startup(dispatcher: Dispatcher):
     url = f"{PUBLIC_URL}/webhook/{WEBHOOK_SECRET}"
+    await get_pool()
     await bot.set_webhook(url=url, secret_token=WEBHOOK_SECRET)
     logging.info("Webhook set to %s", url)
 
 dp.startup.register(on_startup)
 
+# ---------- App runner ----------
 if __name__ == "__main__":
     web.run_app(app, host="0.0.0.0", port=PORT)
 
