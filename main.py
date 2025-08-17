@@ -251,13 +251,6 @@ async def on_startup(dispatcher: Dispatcher):
 dp.include_router(router)
 
 if __name__ == "__main__":
-    import logging
-
-    async def main():
-        await dp.startup()
-        logging.info("Starting web server...")
-        # запуск aiohttp напрямую, БЕЗ asyncio.run()
-        web.run_app(app, host="0.0.0.0", port=PORT)
-
     import asyncio
-    asyncio.get_event_loop().run_until_complete(main())
+    asyncio.get_event_loop().run_until_complete(dp.startup())
+    web.run_app(app, host="0.0.0.0", port=PORT)
